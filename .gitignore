@@ -1,0 +1,38 @@
+# --- Python / Django ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+db.sqlite3
+*.log
+
+# Entorno virtual
+.venv/
+env/
+venv/
+
+# Archivos de configuración
+*.env
+.env.*
+!env.example
+
+# Configuración de editores
+.vscode/
+.idea/
+
+# Archivos estáticos y media
+/media/
+staticfiles/
+static/
+
+# --- Node / Vite ---
+node_modules/
+dist/
+build/
+.cache/
+
+# Archivos de sistema operativo
+.DS_Store
+Thumbs.db
