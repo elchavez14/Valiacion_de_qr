@@ -61,8 +61,32 @@ python manage.py migrate
 
 Esto creará automáticamente un archivo db.sqlite3 en tu proyecto.
 
-Opcional: crear un superusuario:
+Opcional: crear un superusuario:Entra al shell de Django:
+En la terminal se debe entrar al shell
 
+python manage.py shell
+
+
+Dentro del shell, escribe:
+
+from accounts.models import User
+
+# Crear usuario administrador
+admin_user = User.objects.create_user(
+    username="miadmin",
+    password="123456",
+    role="ADMIN",   
+    email="admin@example.com"
+)
+
+print("Usuario admin creado:", admin_user.username, admin_user.role)
+
+
+Salir del shell:
+
+exit()
+
+o tambien puedes hacer esto, pero solo te seras tecnico.
 python manage.py createsuperuser
 
 5. Backend (Django)
