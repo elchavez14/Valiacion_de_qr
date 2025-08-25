@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { Toaster } from "react-hot-toast";
 import { setAuth } from "./api";
 import { getAccess } from "./store/auth";
-import Login from "./pages/Login";
+import Login from "./pages/login";
 import Open from "./pages/Open";
 import OrderWizard from "./pages/OrderWizard";
 import "./index.css";
