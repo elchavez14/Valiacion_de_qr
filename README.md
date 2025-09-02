@@ -111,7 +111,10 @@ Instalar dependencias (una vez):
 
 cd frontend
 npm install
-
+Y despues de eso
+✅ @zxing/browser es una librería de JavaScript para el frontend (React + Vite), y por eso:
+Se instala con:
+npm install @zxing/browser
 
 Levantar en modo desarrollo:
 
