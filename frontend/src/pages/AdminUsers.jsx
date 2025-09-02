@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import api from "../api";
 import toast from "react-hot-toast";
 
 export default function AdminUsers() {
@@ -8,6 +8,8 @@ export default function AdminUsers() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("TECNICO");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => { loadUsers(); }, []);
 
   async function loadUsers() {
     try {
@@ -22,11 +24,7 @@ export default function AdminUsers() {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.post("/auth/users/", {
-        username,
-        password,
-        role,
-      });
+      await api.post("/auth/users/", { username, password, role });
       toast.success("Usuario creado");
       setUsername(""); setPassword(""); setRole("TECNICO");
       loadUsers();
@@ -40,7 +38,7 @@ export default function AdminUsers() {
   async function toggleActive(id, active) {
     try {
       await api.post(`/auth/users/${id}/set_active/`, { active: !active });
-      toast.success("Estado cambiado");
+      toast.success("Estado actualizado");
       loadUsers();
     } catch {
       toast.error("Error cambiando estado");
@@ -57,58 +55,86 @@ export default function AdminUsers() {
     }
   }
 
-  useEffect(() => { loadUsers(); }, []);
-
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Gestión de Usuarios</h1>
+    <div className="min-h-screen bg-orange-50 p-6">
+      <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6 space-y-6">
+        <h1 className="text-3xl font-bold text-orange-500">👤 Gestión de Usuarios</h1>
 
-      <form onSubmit={createUser} className="space-y-3 border p-4 rounded">
-        <h2 className="font-semibold">Crear nuevo usuario</h2>
-        <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="Username"
-               className="border p-2 w-full"/>
-        <input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password"
-               type="password" className="border p-2 w-full"/>
-        <select value={role} onChange={e=>setRole(e.target.value)} className="border p-2 w-full">
-          <option value="TECNICO">Técnico</option>
-          <option value="ADMIN">Administrador</option>
-        </select>
-        <button disabled={loading} className="bg-black text-white px-4 py-2 rounded">
-          {loading ? "Creando..." : "Crear"}
-        </button>
-      </form>
+        {/* FORMULARIO */}
+        <form onSubmit={createUser} className="space-y-4 border border-orange-200 bg-orange-100 p-4 rounded">
+          <h2 className="text-xl font-semibold text-orange-600">➕ Crear nuevo usuario</h2>
 
-      <h2 className="font-semibold">Usuarios existentes</h2>
-      <table className="w-full text-sm border">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border px-2">ID</th>
-            <th className="border px-2">Username</th>
-            <th className="border px-2">Rol</th>
-            <th className="border px-2">Activo</th>
-            <th className="border px-2">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map(u=>(
-            <tr key={u.id}>
-              <td className="border px-2">{u.id}</td>
-              <td className="border px-2">{u.username}</td>
-              <td className="border px-2">{u.role}</td>
-              <td className="border px-2">{u.is_active ? "✅" : "❌"}</td>
-              <td className="border px-2 space-x-2">
-                <button onClick={()=>toggleActive(u.id, u.is_active)} className="underline text-blue-600">
-                  {u.is_active ? "Desactivar" : "Activar"}
-                </button>
-                <button onClick={()=>changeRole(u.id, u.role==="ADMIN"?"TECNICO":"ADMIN")}
-                        className="underline text-green-600">
-                  Cambiar rol
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Nombre de usuario"
+            className="w-full p-2 border border-orange-300 rounded bg-orange-50 focus:outline-none"
+          />
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Contraseña"
+            type="password"
+            className="w-full p-2 border border-orange-300 rounded bg-orange-50 focus:outline-none"
+          />
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className="w-full p-2 border border-orange-300 rounded bg-orange-50 focus:outline-none"
+          >
+            <option value="TECNICO">Técnico</option>
+            <option value="ADMIN">Administrador</option>
+          </select>
+
+          <button
+            disabled={loading}
+            className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded shadow font-medium transition"
+          >
+            {loading ? "Creando..." : "Crear usuario"}
+          </button>
+        </form>
+
+        {/* TABLA */}
+        <h2 className="text-xl font-semibold text-orange-600">📄 Usuarios existentes</h2>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border border-orange-200 shadow-sm rounded">
+            <thead className="bg-orange-100 text-orange-700 uppercase text-xs">
+              <tr>
+                <th className="p-3">ID</th>
+                <th className="p-3">Username</th>
+                <th className="p-3">Rol</th>
+                <th className="p-3">Activo</th>
+                <th className="p-3">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className="border-t hover:bg-orange-50">
+                  <td className="p-3">{u.id}</td>
+                  <td className="p-3">{u.username}</td>
+                  <td className="p-3">{u.role}</td>
+                  <td className="p-3">{u.is_active ? "✅" : "❌"}</td>
+                  <td className="p-3 space-x-2">
+                    <button
+                      onClick={() => toggleActive(u.id, u.is_active)}
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      {u.is_active ? "Desactivar" : "Activar"}
+                    </button>
+                    <button
+                      onClick={() => changeRole(u.id, u.role === "ADMIN" ? "TECNICO" : "ADMIN")}
+                      className="text-sm text-green-600 hover:underline"
+                    >
+                      Cambiar rol
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

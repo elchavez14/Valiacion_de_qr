@@ -13,23 +13,43 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="sticky top-0 z-10 flex gap-4 items-center p-3 border-b bg-white shadow">
-      <Link to="/" className="font-bold text-indigo-800">Inicio</Link>
-      {role === "ADMIN" && (
-        <>
-          <Link to="/admin/users" className="hover:text-indigo-800">Usuarios</Link>
-          <Link to="/admin/orders" className="hover:text-indigo-800">Órdenes</Link>
-          <Link to="/admin/dashboard" className="hover:text-indigo-800">Dashboard</Link>
-        </>
-      )}
-      {role === "TECNICO" && (
-        <Link to="/my-orders" className="hover:text-indigo-800">Mis Órdenes</Link>
-      )}
-      {role && (
-        <button onClick={logout} className="ml-auto underline text-red-600 hover:text-red-800">
-          Cerrar sesión
-        </button>
-      )}
+    <nav className="sticky top-0 z-10 flex items-center justify-between px-6 py-3 bg-orange-500 text-white shadow-lg">
+      {/* Logo o nombre del sistema */}
+      <div className="flex items-center gap-4 font-bold text-xl">
+        <Link to="/" className="hover:text-orange-100 transition">
+          🧠 Sistema QR
+        </Link>
+      </div>
+
+      {/* Enlaces según rol */}
+      <div className="flex items-center gap-6 text-sm font-medium">
+        {role === "ADMIN" && (
+          <>
+            <Link to="/admin/users" className="hover:underline">
+              Usuarios
+            </Link>
+            <Link to="/admin/orders" className="hover:underline">
+              Órdenes
+            </Link>
+            <Link to="/admin/dashboard" className="hover:underline">
+              Dashboard
+            </Link>
+          </>
+        )}
+        {role === "TECNICO" && (
+          <Link to="/my-orders" className="hover:underline">
+            Mis Órdenes
+          </Link>
+        )}
+        {role && (
+          <button
+            onClick={logout}
+            className="bg-white text-orange-500 hover:bg-orange-100 px-3 py-1 rounded shadow-sm transition"
+          >
+            Cerrar sesión
+          </button>
+        )}
+      </div>
     </nav>
   );
 }

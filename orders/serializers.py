@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import ServiceOrder
 from rest_framework import serializers
-from .models import ServiceOrder, Evidence
+from .models import ServiceOrder, Evidence, AuditLog
 
 class ServiceOrderCreateSerializer(serializers.Serializer):
     technician_id = serializers.IntegerField()
@@ -48,3 +48,21 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
             "created_at","expires_at","closing_reason","closing_notes","closed_at",
             "evidences"
         ]
+class AuditLogSerializer(serializers.ModelSerializer):
+    admin_username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AuditLog
+        fields = [
+            "id",
+            "action",
+            "admin_username",
+            "ot_jti",
+            "audit_jti",
+            "old_values",
+            "new_values",
+            "created_at",
+        ]
+
+    def get_admin_username(self, obj):
+        return getattr(obj.admin, "username", None)

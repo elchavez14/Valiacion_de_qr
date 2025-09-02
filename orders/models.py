@@ -31,6 +31,9 @@ class ServiceOrder(models.Model):
     closing_reason = models.CharField(max_length=64, blank=True)   # p.ej. ausencia_titular / familiar_ausente / menor_de_edad
     closing_notes = models.TextField(blank=True)                  # texto libre opcional
     closed_at = models.DateTimeField(null=True, blank=True)
+    ot_token = models.TextField(blank=True)           # JWT de la OT (generado al crear)
+    ot_token_jti = models.CharField(max_length=64, blank=True)  # ID único del token
+    
 
 
     def __str__(self):
@@ -52,3 +55,14 @@ class Evidence(models.Model):
         self.file_hash = sha256_file(self.file)
         self.save(update_fields=["file_hash"])
 
+class AuditLog(models.Model):
+    order = models.ForeignKey(ServiceOrder, on_delete=models.CASCADE, related_name="audits")
+    admin = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    action = models.CharField(max_length=50)
+    ot_token_copy = models.TextField()
+    ot_jti = models.CharField(max_length=64)
+    audit_jwt = models.TextField()
+    audit_jti = models.CharField(max_length=64)
+    old_values = models.JSONField(null=True, blank=True)
+    new_values = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)

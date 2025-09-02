@@ -5,20 +5,24 @@ from django.conf import settings
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.viewsets import ModelViewSet
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
+from .jwt_audit import make_ot_token, make_audit_token
+from .models import AuditLog
+from .jwt_audit import make_audit_token
 
 from .serializers import (
     ServiceOrderCreateSerializer, ServiceOrderSerializer,
-    FailInstallationSerializer, SuccessInstallationSerializer
+    FailInstallationSerializer, SuccessInstallationSerializer,
+    ServiceOrderDetailSerializer
 )
 
 from accounts.models import User
 from .models import ServiceOrder, Evidence
-from .serializers import ServiceOrderCreateSerializer, ServiceOrderSerializer
-from .serializers import ServiceOrderDetailSerializer
 from django.db.models import Count
+from .serializers import AuditLogSerializer
 
 # Permisos simples
 class IsAdmin(permissions.BasePermission):
@@ -29,7 +33,7 @@ class IsTechnician(permissions.BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.role == "TECNICO")
 
-class ServiceOrderViewSet(viewsets.GenericViewSet):
+class ServiceOrderViewSet(ModelViewSet):
     queryset = ServiceOrder.objects.all().order_by("-id")
 
     def get_permissions(self):
@@ -48,14 +52,13 @@ class ServiceOrderViewSet(viewsets.GenericViewSet):
         try:
             order = self.get_queryset().get(pk=pk)
         except ServiceOrder.DoesNotExist:
-            raise Http404
-        # si es técnico, asegurar que sea suya
-        if request.user.role == "TECNICO" and order.technician_id != request.user.id:
-            return Response({"detail": "No autorizado."}, status=403)
-        return Response(ServiceOrderSerializer(order).data)
+            return Response({"detail": "Orden no encontrada"}, status=404)
+
+        serializer = ServiceOrderDetailSerializer(order)
+        return Response(serializer.data)
 
     @action(detail=False, methods=["POST"], permission_classes=[IsAdmin])
-    def create_order(self, request):
+    def create_order(self, request, *args, **kwargs):
         """
         Crea la orden: genera JWT, guarda plano + sha256, y setea expires_at.
         """
@@ -105,10 +108,12 @@ class ServiceOrderViewSet(viewsets.GenericViewSet):
             "exp": int(expires_at.timestamp()),
             "iat": int(timezone.now().timestamp()),
         }
-        final_jwt = jwt.encode(final_payload, settings.SECRET_KEY, algorithm="HS256")
+        final_jwt, jti = make_ot_token(request.user, order)
         order.jwt_token = final_jwt
         order.jwt_hash = hashlib.sha256(final_jwt.encode()).hexdigest()
-        order.save(update_fields=["jwt_token","jwt_hash"])
+        order.ot_token = final_jwt
+        order.ot_token_jti = jti
+        order.save(update_fields=["jwt_token", "jwt_hash", "ot_token", "ot_token_jti"]) 
 
         return Response({
             "order": ServiceOrderSerializer(order).data
@@ -246,6 +251,8 @@ class ServiceOrderViewSet(viewsets.GenericViewSet):
             file=data["photo_address"]
         )
         ev.compute_and_set_hash()
+        log_evidence_audit(request.user, order, "subida_foto_domicilio", ev, data["jwt"])
+
 
         # Cerrar
         order.status = ServiceOrder.Status.FAILED
@@ -293,6 +300,8 @@ class ServiceOrderViewSet(viewsets.GenericViewSet):
             file=data["doc_signed"]
         )
         ev1.compute_and_set_hash()
+        log_evidence_audit(request.user, order, "subida_doc_firmado", ev1, data["jwt"])
+
 
         # 2) Doc identidad
         ev2 = Evidence.objects.create(
@@ -301,6 +310,8 @@ class ServiceOrderViewSet(viewsets.GenericViewSet):
             file=data["doc_id"]
         )
         ev2.compute_and_set_hash()
+        log_evidence_audit(request.user, order, "subida_doc_identidad", ev2, data["jwt"])
+
     
 
         # Cerrar
@@ -344,3 +355,179 @@ def ensure_access_technician(request, order: ServiceOrder):
 def check_expiration(order: ServiceOrder):
     return not (order.expires_at and order.expires_at < timezone.now())
 
+def log_audit_action(admin_user, order, action, old_values, new_values):
+    audit_jwt, audit_jti = make_audit_token(
+        admin_user=admin_user,
+        order=order,
+        action=action,
+        old=old_values,
+        new=new_values
+    )
+    AuditLog.objects.create(
+        order=order,
+        admin=admin_user,
+        action=action,
+        ot_token_copy=order.ot_token,
+        ot_jti=order.ot_token_jti,
+        audit_jwt=audit_jwt,
+        audit_jti=audit_jti,
+        old_values=old_values,
+        new_values=new_values,
+    )
+
+def validate_order_access(request, order):
+    """
+    Valida el acceso a la orden para el usuario técnico.
+    Retorna un Response en caso de error, o None si es válido.
+    """
+    # 1. Verificar rol
+    if request.user.role != "TECNICO":
+        return Response({"detail": "No autorizado."}, status=403)
+
+    # 2. Verificar si es su orden
+    if order.technician_id != request.user.id:
+        return Response({"detail": "No autorizado."}, status=403)
+
+    # 3. Verificar expiración
+    if order.expires_at and order.expires_at < timezone.now():
+        return Response({"detail": "Orden expirada."}, status=403)
+
+    return None  # Todo bien, acceso permitido
+@action(detail=True, methods=["GET"], permission_classes=[permissions.IsAuthenticated, IsAdmin])
+def audits(self, request, pk=None):
+    """
+    Devuelve la auditoría (historial de modificaciones) de una orden.
+    Solo para administradores.
+    """
+    try:
+        order = self.get_queryset().get(pk=pk)
+    except ServiceOrder.DoesNotExist:
+        return Response({"detail": "Orden no encontrada"}, status=404)
+
+    queryset = order.audits.all().order_by("-created_at")
+    serializer = AuditLogSerializer(queryset, many=True)
+    return Response(serializer.data, status=200)
+@action(detail=True, methods=["POST"], permission_classes=[IsTechnician])
+def validate_token(self, request, pk=None):
+    """
+    Valida que el JWT escaneado coincide con el hash guardado y pertenece al técnico autenticado.
+    """
+    jwt_token = request.data.get("jwt")
+    if not jwt_token:
+        return Response({"detail": "Falta el JWT"}, status=400)
+
+    try:
+        order = self.get_queryset().get(pk=pk)
+    except ServiceOrder.DoesNotExist:
+        return Response({"detail": "Orden no encontrada"}, status=404)
+
+    # Validar hash
+    expected_hash = hashlib.sha256(jwt_token.encode()).hexdigest()
+    if expected_hash != order.jwt_hash:
+        return Response({"detail": "JWT inválido"}, status=403)
+
+    # Validar que el técnico autenticado es el que está en el token
+    payload = jwt.decode(jwt_token, settings.SECRET_KEY, algorithms=["HS256"])
+    if payload.get("technician_id") != request.user.id:
+        return Response({"detail": "Técnico no autorizado"}, status=403)
+
+    return Response({
+        "valid": True,
+        "order": ServiceOrderSerializer(order).data
+    })
+def log_evidence_audit(user, order, action, evidencia, jwt):
+    """Registrar en auditoría cuando se sube evidencia."""
+    payload = {
+        "evidence_id": evidencia.id,
+        "evidence_kind": evidencia.kind,
+        "filename": evidencia.file.name
+    }
+    audit_jwt, audit_jti = make_audit_token(user, order, action, {}, payload)
+    AuditLog.objects.create(
+        order=order,
+        admin=user,  # o puede ser técnico si lo permites
+        action=action,
+        ot_token_copy=jwt,
+        ot_jti=order.ot_token_jti,
+        audit_jwt=audit_jwt,
+        audit_jti=audit_jti,
+        old_values=None,
+        new_values=payload,
+    )
+@action(detail=True, methods=["GET"])
+def download_full_pdf(self, request, pk=None):
+    """
+    Genera un PDF completo: datos de la orden + QR + evidencias (imagenes).
+    """
+    try:
+        order = self.get_queryset().get(pk=pk)
+    except ServiceOrder.DoesNotExist:
+        raise Http404
+
+    # Verificar permisos
+    if request.user.role == "TECNICO" and order.technician_id != request.user.id:
+        return Response({"detail": "No autorizado."}, status=403)
+
+    # Preparar QR
+    qr_value = f"{settings.FRONTEND_URL}?id={order.id}#jwt={order.jwt_token}"
+    qr_img = qrcode.make(qr_value)
+    buf_qr = io.BytesIO()
+    qr_img.save(buf_qr, format="PNG")
+    buf_qr.seek(0)
+    qr_reader = ImageReader(buf_qr)
+
+    # Crear PDF
+    pdf_buffer = io.BytesIO()
+    c = canvas.Canvas(pdf_buffer, pagesize=A4)
+    w, h = A4
+
+    # Página 1: info
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, h - 60, "Orden de Servicio - Detalles")
+
+    c.setFont("Helvetica", 11)
+    c.drawString(50, h - 90, f"UUID: {order.uuid_order}")
+    c.drawString(50, h - 110, f"Técnico: {order.technician_name}")
+    c.drawString(50, h - 130, f"Creada: {order.created_at.strftime('%Y-%m-%d %H:%M')}")
+    c.drawString(50, h - 150, f"Estado: {order.status}")
+    if order.expires_at:
+        c.drawString(50, h - 170, f"Expira: {order.expires_at.strftime('%Y-%m-%d %H:%M')}")
+
+    # QR
+    qr_size = 150
+    c.drawImage(qr_reader, w - qr_size - 50, h - qr_size - 70,
+                qr_size, qr_size, preserveAspectRatio=True, mask="auto")
+
+    c.setFont("Helvetica-Oblique", 10)
+    c.drawString(50, 50, "Escanee el QR para ver esta orden en línea.")
+
+    c.showPage()
+
+    # Páginas siguientes: evidencias
+    for ev in order.evidences.all():
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(50, h - 60, f"Evidencia: {ev.kind}")
+        c.setFont("Helvetica", 10)
+        c.drawString(50, h - 80, f"Subido el: {ev.created_at.strftime('%Y-%m-%d %H:%M')}")
+
+        if ev.file.name.lower().endswith(".pdf"):
+            c.drawString(50, h - 100, "(PDF adjunto no renderizado)")
+        else:
+            try:
+                image_path = ev.file.path
+                img_reader = ImageReader(image_path)
+                c.drawImage(img_reader, 50, 150, width=500, preserveAspectRatio=True, mask="auto")
+            except Exception as e:
+                c.drawString(50, h - 100, f"Error al cargar la imagen: {str(e)}")
+
+        c.showPage()
+
+    c.save()
+    pdf_buffer.seek(0)
+
+    return FileResponse(
+        pdf_buffer,
+        as_attachment=True,
+        filename=f"orden_completa_{order.uuid_order}.pdf",
+        content_type="application/pdf"
+    )

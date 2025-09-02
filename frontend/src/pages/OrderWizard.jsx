@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import api from "../api";
 import { useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 
@@ -8,7 +8,7 @@ export default function OrderWizard() {
   const params = new URLSearchParams(loc.search);
   const id = params.get("id");
 
-  const [step, setStep] = useState(0); // 0 pregunta, 1 NO, 2 SI
+  const [step, setStep] = useState(0);
   const [jwt, setJwt] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -24,16 +24,26 @@ export default function OrderWizard() {
   const [notesYes, setNotesYes] = useState("");
 
   useEffect(() => {
-  (async () => {
-    if (!id) return;   // 👈 evita la llamada si id es null
-    try {
-      await api.post(`/orders/${id}/start/`);
-    } catch (e) {
-      console.error("Error al iniciar orden", e);
-    }
-  })();
-}, [id]);
+    if (!id) return;
+    (async () => {
+      try {
+        await api.post(`/orders/${id}/start/`);
+      } catch (e) {
+        console.error("Error al iniciar orden", e);
+      }
+    })();
+  }, [id]);
 
+  function resetForms() {
+    setJwt("");
+    setPhotoAddress(null);
+    setJustification("ausencia_titular");
+    setNotesNo("");
+    setTitularPresent(true);
+    setDocSigned(null);
+    setDocId(null);
+    setNotesYes("");
+  }
 
   async function submitNo() {
     if (!jwt) return toast.error("Pega el JWT");
@@ -79,100 +89,141 @@ export default function OrderWizard() {
     }
   }
 
-  function resetForms() {
-    setJwt("");
-    setPhotoAddress(null);
-    setJustification("ausencia_titular");
-    setNotesNo("");
-    setTitularPresent(true);
-    setDocSigned(null);
-    setDocId(null);
-    setNotesYes("");
-  }
-
   if (!id) {
-    return <div className="p-6">Falta el parámetro <code>id</code> en la URL.</div>;
+    return <div className="p-6 text-red-600">⚠️ Falta el parámetro <code>id</code> en la URL.</div>;
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto bg-white rounded-xl shadow-lg space-y-4">
-      <h1 className="text-xl font-bold text-indigo-800">Orden #{id}</h1>
+    <div className="min-h-screen bg-orange-50 p-6">
+      <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-6 space-y-6">
+        <h1 className="text-2xl font-bold text-orange-500">🔧 Cierre de Orden #{id}</h1>
 
-      {step === 0 && (
-        <div className="space-y-3">
-          <div className="text-sm text-gray-600">¿Instalación satisfactoria?</div>
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setStep(2)} className="bg-green-600 hover:bg-green-700 text-white py-2 rounded shadow">Sí</button>
-            <button onClick={() => setStep(1)} className="bg-red-600 hover:bg-red-700 text-white py-2 rounded shadow">No</button>
+        {/* Paso 0 */}
+        {step === 0 && (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-700">¿La instalación fue satisfactoria?</p>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setStep(2)}
+                className="bg-green-600 hover:bg-green-700 text-white py-2 rounded shadow"
+              >
+                ✅ Sí, fue exitosa
+              </button>
+              <button
+                onClick={() => setStep(1)}
+                className="bg-red-600 hover:bg-red-700 text-white py-2 rounded shadow"
+              >
+                ❌ No, fue fallida
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {step === 1 && (
-        <div className="space-y-3">
-          <h2 className="font-semibold">Marcar como <span className="text-red-600">Fallida</span></h2>
-          <label className="block">
-            Foto del domicilio:
-            <input type="file" accept="image/*" capture="environment" onChange={e => setPhotoAddress(e.target.files?.[0] || null)} />
-          </label>
-          <label className="block">
-            Justificación:
-            <select value={justification} onChange={e=>setJustification(e.target.value)} className="border p-2 w-full">
-              <option value="ausencia_titular">Ausencia del titular</option>
-              <option value="familiar_ausente">Familiar ausente</option>
-              <option value="menor_de_edad">Menor de edad</option>
-            </select>
-          </label>
-          <label className="block">
-            JWT (pégalo):
-            <textarea value={jwt} onChange={e=>setJwt(e.target.value)} className="border p-2 w-full" rows={3} />
-          </label>
-          <label className="block">
-            Notas (opcional):
-            <input value={notesNo} onChange={e=>setNotesNo(e.target.value)} className="border p-2 w-full" />
-          </label>
+        {/* Paso NO */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-red-600">📸 Cierre Fallido</h2>
 
-          <button disabled={loading} onClick={submitNo} className="bg-black text-white w-full py-2 rounded">
-            {loading ? "Enviando..." : "Confirmar Fallida"}
-          </button>
-        </div>
-      )}
+            <label className="block text-sm font-medium text-gray-700">
+              Foto del domicilio:
+              <input type="file" accept="image/*" capture="environment"
+                onChange={e => setPhotoAddress(e.target.files?.[0] || null)}
+                className="mt-1 block w-full"
+              />
+            </label>
 
-      {step === 2 && (
-        <div className="space-y-3">
-          <h2 className="font-semibold">Marcar como <span className="text-green-600">Exitosa</span></h2>
-          <label className="block">
-            ¿Titular presente?
-            <select value={String(titularPresent)} onChange={e=>setTitularPresent(e.target.value==="true")} className="border p-2 w-full">
-              <option value="true">Sí</option>
-              <option value="false">No (familiar autorizado)</option>
-            </select>
-          </label>
-          <label className="block">
-            Documento firmado (imagen o PDF):
-            <input type="file" accept="image/*,.pdf" onChange={e=>setDocSigned(e.target.files?.[0] || null)} />
-          </label>
-          <label className="block">
-            Documento de identidad:
-            <input type="file" accept="image/*" capture="environment" onChange={e=>setDocId(e.target.files?.[0] || null)} />
-          </label>
-          <label className="block">
-            JWT (pégalo):
-            <textarea value={jwt} onChange={e=>setJwt(e.target.value)} className="border p-2 w-full" rows={3} />
-          </label>
-          <label className="block">
-            Notas (opcional):
-            <input value={notesYes} onChange={e=>setNotesYes(e.target.value)} className="border p-2 w-full" />
-          </label>
+            <label className="block text-sm font-medium text-gray-700">
+              Justificación:
+              <select value={justification} onChange={e => setJustification(e.target.value)}
+                className="mt-1 p-2 border border-orange-300 rounded w-full bg-orange-50"
+              >
+                <option value="ausencia_titular">Ausencia del titular</option>
+                <option value="familiar_ausente">Familiar ausente</option>
+                <option value="menor_de_edad">Menor de edad</option>
+              </select>
+            </label>
 
-          <button disabled={loading} onClick={submitYes} className="bg-black text-white w-full py-2 rounded">
-            {loading ? "Enviando..." : "Confirmar Exitosa"}
-          </button>
-        </div>
-      )}
-      <button className="bg-indigo-800 text-white px-4 py-2 rounded hover:bg-indigo-900 transition">
-  Acción
-</button>
+            <label className="block text-sm font-medium text-gray-700">
+              JWT:
+              <textarea value={jwt} onChange={e => setJwt(e.target.value)}
+                className="mt-1 border border-orange-300 rounded w-full p-2 bg-orange-50" rows={3}
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-gray-700">
+              Notas (opcional):
+              <input value={notesNo} onChange={e => setNotesNo(e.target.value)}
+                className="mt-1 border border-orange-300 rounded w-full p-2 bg-orange-50"
+              />
+            </label>
+
+            <button
+              disabled={loading}
+              onClick={submitNo}
+              className="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700"
+            >
+              {loading ? "Enviando..." : "Confirmar como Fallida"}
+            </button>
+          </div>
+        )}
+
+        {/* Paso SI */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-green-600">📑 Cierre Exitoso</h2>
+
+            <label className="block text-sm font-medium text-gray-700">
+              ¿Titular presente?
+              <select
+                value={String(titularPresent)}
+                onChange={e => setTitularPresent(e.target.value === "true")}
+                className="mt-1 p-2 border border-orange-300 rounded w-full bg-orange-50"
+              >
+                <option value="true">Sí</option>
+                <option value="false">No (familiar autorizado)</option>
+              </select>
+            </label>
+
+            <label className="block text-sm font-medium text-gray-700">
+              Documento firmado (imagen o PDF):
+              <input type="file" accept="image/*,.pdf"
+                onChange={e => setDocSigned(e.target.files?.[0] || null)}
+                className="mt-1 block w-full"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-gray-700">
+              Documento de identidad:
+              <input type="file" accept="image/*" capture="environment"
+                onChange={e => setDocId(e.target.files?.[0] || null)}
+                className="mt-1 block w-full"
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-gray-700">
+              JWT:
+              <textarea value={jwt} onChange={e => setJwt(e.target.value)}
+                className="mt-1 border border-orange-300 rounded w-full p-2 bg-orange-50" rows={3}
+              />
+            </label>
+
+            <label className="block text-sm font-medium text-gray-700">
+              Notas (opcional):
+              <input value={notesYes} onChange={e => setNotesYes(e.target.value)}
+                className="mt-1 border border-orange-300 rounded w-full p-2 bg-orange-50"
+              />
+            </label>
+
+            <button
+              disabled={loading}
+              onClick={submitYes}
+              className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+            >
+              {loading ? "Enviando..." : "Confirmar como Exitosa"}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
